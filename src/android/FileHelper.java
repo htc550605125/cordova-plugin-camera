@@ -53,11 +53,11 @@ public class FileHelper {
         if (Build.VERSION.SDK_INT < 11)
             realPath = FileHelper.getRealPathFromURI_BelowAPI11(cordova.getActivity(), uri);
 
-        // SDK >= 11 && SDK < 19
+            // SDK >= 11 && SDK < 19
         else if (Build.VERSION.SDK_INT < 19)
             realPath = FileHelper.getRealPathFromURI_API11to18(cordova.getActivity(), uri);
 
-        // SDK > 19 (Android 4.4)
+            // SDK > 19 (Android 4.4)
         else
             realPath = FileHelper.getRealPathFromURI_API19(cordova.getActivity(), uri);
 
@@ -72,8 +72,55 @@ public class FileHelper {
      * @param cordova the current application context
      * @return the full path to the file
      */
-    public static String getRealPath(String uriString, CordovaInterface cordova) {
+    /*public static String getRealPath(String uriString, CordovaInterface cordova) {
         return FileHelper.getRealPath(Uri.parse(uriString), cordova);
+    }*/
+
+    @SuppressWarnings("deprecation")
+    public static String getRealPath(String uriString, CordovaInterface cordova) {
+        String realPath = null;
+
+
+        final boolean isKitKat = Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT;
+
+        // DocumentProvider
+        if (isKitKat) {
+            Cursor cursor =  cordova.getActivity().getContentResolver().query(Uri.parse(uriString), null, null, null, null);
+            cursor.moveToFirst();
+            String document_id = cursor.getString(0);
+            document_id = document_id.substring(document_id.lastIndexOf(":")+1);
+            cursor.close();
+
+            cursor = cordova.getActivity().getContentResolver().query(
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    null, MediaStore.Images.Media._ID + " = ? ", new String[]{document_id}, null);
+            cursor.moveToFirst();
+            String path = cursor.getString(cursor.getColumnIndex(MediaStore.Images.Media.DATA));
+            realPath = "file://" + path;
+            cursor.close();
+        }else{
+
+            if (uriString.startsWith("content://")) {
+                String[] proj = { _DATA };
+                Cursor cursor = cordova.getActivity().managedQuery(Uri.parse(uriString), proj, null, null, null);
+                int column_index = cursor.getColumnIndexOrThrow(_DATA);
+                cursor.moveToFirst();
+                realPath = cursor.getString(column_index);
+                if (realPath == null) {
+                    LOG.e(LOG_TAG, "Could get real path for URI string %s", uriString);
+                }
+            } else if (uriString.startsWith("file://")) {
+                realPath = uriString.substring(7);
+                if (realPath.startsWith("/android_asset/")) {
+                    LOG.e(LOG_TAG, "Cannot get real path for URI string %s because it is a file:///android_asset/ URI.", uriString);
+                    realPath = null;
+                }
+            } else {
+                realPath = "file://" + uriString;
+            }
+
+        }
+        return realPath;
     }
 
     @SuppressLint("NewApi")
@@ -209,7 +256,7 @@ public class FileHelper {
         }
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
     }
-    
+
     /**
      * Returns the mime type of the data specified by the given URI string.
      *
